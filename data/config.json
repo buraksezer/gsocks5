@@ -1,0 +1,14 @@
+{
+        "debug": true,
+        "method": "tcp",
+        "server_host":"46.101.132.55",
+        "server_port": "8388",
+        "client_host": "localhost",
+        "client_port": "1080",
+        "password":"barfoo!",
+        "timeout": 600,
+        "graceful_period": 5,
+        "role": "client"
+}
+
+
