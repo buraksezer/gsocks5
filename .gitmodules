@@ -1,0 +1,9 @@
+[submodule "vendor/golang.org/x/net"]
+	path = vendor/golang.org/x/net
+	url = https://go.googlesource.com/net
+[submodule "vendor/github.com/armon/go-socks5"]
+	path = vendor/github.com/armon/go-socks5
+	url = https://github.com/armon/go-socks5
+[submodule "vendor/github.com/hashicorp/logutils"]
+	path = vendor/github.com/hashicorp/logutils
+	url = https://github.com/hashicorp/logutils
