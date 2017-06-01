@@ -33,20 +33,18 @@ func newServer(cfg config) *server {
 func (s *server) proxyClientConn(conn, rConn net.Conn, ch chan struct{}) {
 	defer s.wg.Done()
 	defer close(ch)
-
 	var wg sync.WaitGroup
 	connCopy := func(dst, src net.Conn) {
 		defer wg.Done()
-		nr, err := io.Copy(dst, src)
-		log.Printf("[DEBUG] %d bytes has been copied", nr)
+		_, err := io.Copy(dst, src)
 		if err != nil {
-			if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
-				log.Println("[ERR] Failed to copy connection:", err)
+			if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "readfrom") {
+				log.Println("[ERR] gsocks5: Failed to copy connection from",
+					src.RemoteAddr(), "to", conn.RemoteAddr(), ":", err)
 			}
 			return
 		}
 	}
-
 	wg.Add(2)
 	go connCopy(rConn, conn)
 	go connCopy(conn, rConn)
@@ -58,20 +56,20 @@ func (s *server) clientConn(conn net.Conn) {
 	defer func() {
 		if err := conn.Close(); err != nil {
 			if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
-				// TODO: log this event
+				log.Println("[ERR] gsocks5: Error while closing socket", conn.RemoteAddr())
 			}
 		}
 	}()
 
 	rConn, err := net.Dial(s.cfg.Method, s.socksAddr)
 	if err != nil {
-		log.Println("[ERR] Failed to dial", s.socksAddr, err)
+		log.Println("[ERR] gsocks5: Failed to dial", s.socksAddr, err)
 		return
 	}
 	defer func() {
 		if err := rConn.Close(); err != nil {
 			if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
-				// TODO: log this event
+				log.Println("[ERR] gsocks5: Error while closing socket", rConn.RemoteAddr())
 			}
 		}
 	}()
@@ -81,7 +79,6 @@ func (s *server) clientConn(conn net.Conn) {
 	go s.proxyClientConn(conn, rConn, ch)
 	select {
 	case <-s.done:
-		log.Print("[DEBUG] Closing client connection by force")
 	case <-ch:
 	}
 }
@@ -97,7 +94,7 @@ func (s *server) connSocks5(conn net.Conn) {
 		case <-s.done:
 			if err := conn.Close(); err != nil {
 				if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
-					// TODO: log this event
+					log.Println("[ERR] gsocks5: Error while closing socket", conn.RemoteAddr())
 				}
 			}
 		case <-ch:
@@ -106,7 +103,7 @@ func (s *server) connSocks5(conn net.Conn) {
 
 	defer close(ch)
 	if err := s.socks5.ServeConn(conn); err != nil {
-		// TODO: log this error.
+		log.Println("[ERR] gsocks5: Failed to proxy to ", conn.RemoteAddr())
 	}
 }
 
