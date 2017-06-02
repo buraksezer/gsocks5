@@ -12,21 +12,34 @@ import (
 )
 
 type server struct {
-	socksAddr string
-	cfg       config
-	wg        sync.WaitGroup
-	socks5    *socks5.Server
-	errChan   chan error
-	signal    chan os.Signal
-	done      chan struct{}
+	socksAddr       string
+	cfg             config
+	keepAlivePeriod time.Duration
+	dialTimeout     time.Duration
+	wg              sync.WaitGroup
+	socks5          *socks5.Server
+	errChan         chan error
+	signal          chan os.Signal
+	done            chan struct{}
 }
 
 func newServer(cfg config) *server {
 	return &server{
-		cfg:     cfg,
-		errChan: make(chan error, 1),
-		signal:  make(chan os.Signal),
-		done:    make(chan struct{}),
+		cfg:             cfg,
+		keepAlivePeriod: time.Duration(cfg.KeepAlivePeriod) * time.Second,
+		dialTimeout:     time.Duration(cfg.DialTimeout) * time.Second,
+		errChan:         make(chan error, 1),
+		signal:          make(chan os.Signal),
+		done:            make(chan struct{}),
+	}
+}
+
+func closeConn(conn net.Conn) {
+	err := conn.Close()
+	if err != nil {
+		if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
+			log.Println("[ERR] gsocks5: Error while closing socket", conn.RemoteAddr())
+		}
 	}
 }
 
@@ -53,27 +66,20 @@ func (s *server) proxyClientConn(conn, rConn net.Conn, ch chan struct{}) {
 
 func (s *server) clientConn(conn net.Conn) {
 	defer s.wg.Done()
-	defer func() {
-		if err := conn.Close(); err != nil {
-			if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
-				log.Println("[ERR] gsocks5: Error while closing socket", conn.RemoteAddr())
-			}
-		}
-	}()
-
-	rConn, err := net.Dial(s.cfg.Method, s.socksAddr)
+	defer closeConn(conn)
+	rConn, err := net.DialTimeout(s.cfg.Method, s.socksAddr, s.dialTimeout)
 	if err != nil {
 		log.Println("[ERR] gsocks5: Failed to dial", s.socksAddr, err)
 		return
 	}
-	defer func() {
-		if err := rConn.Close(); err != nil {
-			if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
-				log.Println("[ERR] gsocks5: Error while closing socket", rConn.RemoteAddr())
-			}
-		}
-	}()
+	defer closeConn(rConn)
 
+	// ASSOCIATE command has not been implemented by go-socks5. We currently support TCP but when someone
+	// implements ASSOCIATE command, we will implement an UDP relay in gsocks5.
+	if s.cfg.Method == "tcp" {
+		rConn.(*net.TCPConn).SetKeepAlive(true)
+		rConn.(*net.TCPConn).SetKeepAlivePeriod(s.keepAlivePeriod)
+	}
 	ch := make(chan struct{})
 	s.wg.Add(1)
 	go s.proxyClientConn(conn, rConn, ch)
@@ -92,11 +98,8 @@ func (s *server) connSocks5(conn net.Conn) {
 		defer s.wg.Done()
 		select {
 		case <-s.done:
-			if err := conn.Close(); err != nil {
-				if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
-					log.Println("[ERR] gsocks5: Error while closing socket", conn.RemoteAddr())
-				}
-			}
+			// Close the connection immediately. The process is shutting down.
+			closeConn(conn)
 		case <-ch:
 		}
 	}()
@@ -120,6 +123,13 @@ func (s *server) serve(l net.Listener) {
 			}
 			s.errChan <- nil
 			return
+		}
+
+		// ASSOCIATE command has not been implemented by go-socks5. We currently support TCP but when someone
+		// implements ASSOCIATE command, we will implement an UDP relay in gsocks5.
+		if s.cfg.Method == "tcp" {
+			conn.(*net.TCPConn).SetKeepAlive(true)
+			conn.(*net.TCPConn).SetKeepAlivePeriod(s.keepAlivePeriod)
 		}
 
 		s.wg.Add(1)

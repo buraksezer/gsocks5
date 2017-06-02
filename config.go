@@ -10,19 +10,24 @@ import (
 const (
 	roleClient = "client"
 	roleServer = "server"
+	// KeepAlive period for TCP sockets, in seconds.
+	defaultTCPKeepAlivePeriod = 3600
+	defaultGracefulPeriod     = 10
+	defaultDialTimeout        = 10
 )
 
 type config struct {
-	Debug          bool   `json:"debug"`
-	Method         string `json:"method"`
-	ServerHost     string `json:"server_host"`
-	ServerPort     string `json:"server_port"`
-	ClientHost     string `json:"client_host"`
-	ClientPort     string `json:"client_port"`
-	Password       string `json:"password"`
-	Timeout        int    `json:"timeout"`
-	GracefulPeriod int    `json:"graceful_period"`
-	Role           string `json:"role"`
+	Debug           bool   `json:"debug"`
+	Method          string `json:"method"`
+	ServerHost      string `json:"server_host"`
+	ServerPort      string `json:"server_port"`
+	ClientHost      string `json:"client_host"`
+	ClientPort      string `json:"client_port"`
+	Password        string `json:"password"`
+	KeepAlivePeriod int    `json:"keepalive_period"`
+	GracefulPeriod  int    `json:"graceful_period"`
+	DialTimeout     int    `json:"dial_timeout"`
+	Role            string `json:"role"`
 }
 
 func newConfig(file string) (config, error) {
@@ -40,7 +45,15 @@ func newConfig(file string) (config, error) {
 	}
 	// Default value is 10. It's a random number.
 	if cfg.GracefulPeriod == 0 {
-		cfg.GracefulPeriod = 5
+		cfg.GracefulPeriod = defaultGracefulPeriod
+	}
+
+	if cfg.KeepAlivePeriod == 0 {
+		cfg.KeepAlivePeriod = defaultTCPKeepAlivePeriod
+	}
+
+	if cfg.DialTimeout == 0 {
+		cfg.DialTimeout = defaultDialTimeout
 	}
 	return cfg, nil
 }
