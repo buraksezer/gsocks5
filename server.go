@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/tls"
-	"io"
 	"log"
 	"net"
 	"os"
@@ -13,10 +12,8 @@ import (
 )
 
 type server struct {
-	socksAddr       string
 	cfg             config
 	keepAlivePeriod time.Duration
-	dialTimeout     time.Duration
 	wg              sync.WaitGroup
 	socks5          *socks5.Server
 	errChan         chan error
@@ -24,72 +21,13 @@ type server struct {
 	done            chan struct{}
 }
 
-func newServer(cfg config) *server {
+func newServer(cfg config, sigChan chan os.Signal) *server {
 	return &server{
 		cfg:             cfg,
 		keepAlivePeriod: time.Duration(cfg.KeepAlivePeriod) * time.Second,
-		dialTimeout:     time.Duration(cfg.DialTimeout) * time.Second,
 		errChan:         make(chan error, 2),
-		signal:          make(chan os.Signal),
+		signal:          sigChan,
 		done:            make(chan struct{}),
-	}
-}
-
-func closeConn(conn net.Conn) {
-	err := conn.Close()
-	if err != nil {
-		if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
-			log.Println("[ERR] gsocks5: Error while closing socket", conn.RemoteAddr())
-		}
-	}
-}
-
-func (s *server) proxyClientConn(conn, rConn net.Conn, ch chan struct{}) {
-	defer s.wg.Done()
-	defer close(ch)
-	var wg sync.WaitGroup
-	connCopy := func(dst, src net.Conn) {
-		defer wg.Done()
-		_, err := io.Copy(dst, src)
-		if err != nil {
-			if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "readfrom") {
-				log.Println("[ERR] gsocks5: Failed to copy connection from",
-					src.RemoteAddr(), "to", conn.RemoteAddr(), ":", err)
-			}
-			return
-		}
-	}
-	wg.Add(2)
-	go connCopy(rConn, conn)
-	go connCopy(conn, rConn)
-	wg.Wait()
-}
-
-func (s *server) clientConn(conn net.Conn) {
-	defer s.wg.Done()
-	defer closeConn(conn)
-
-	rConn, err := net.DialTimeout(s.cfg.Method, s.socksAddr, s.dialTimeout)
-	if err != nil {
-		log.Println("[ERR] gsocks5: Failed to dial", s.socksAddr, err)
-		return
-	}
-
-	defer closeConn(rConn)
-	cfg := &tls.Config{
-		InsecureSkipVerify: s.cfg.InsecureSkipVerify,
-	}
-	tlsConn := tls.Client(rConn, cfg)
-	if err = tlsConn.Handshake(); err != nil {
-		log.Println("[ERR] gsocks5: Failed to dial", s.socksAddr, err)
-		return
-	}
-	ch := make(chan struct{})
-	s.wg.Add(1)
-	go s.proxyClientConn(conn, tlsConn, ch)
-	select {
-	case <-s.done:
-	case <-ch:
 	}
 }
 
@@ -130,16 +68,6 @@ func (s *server) serve(l net.Listener) {
 		}
 
 		s.wg.Add(1)
-		if s.cfg.Role == roleClient {
-			// ASSOCIATE command has not been implemented by go-socks5. We currently support TCP but when someone
-			// implements ASSOCIATE command, we will implement an UDP relay in gsocks5.
-			if s.cfg.Method == "tcp" {
-				conn.(*net.TCPConn).SetKeepAlive(true)
-				conn.(*net.TCPConn).SetKeepAlivePeriod(s.keepAlivePeriod)
-			}
-			go s.clientConn(conn)
-			continue
-		}
 		go s.connSocks5(conn)
 	}
 }
@@ -153,62 +81,42 @@ func (s *server) shutdown() {
 	close(s.done)
 }
 
-func (s *server) tlsServer() error {
-	defer s.wg.Done()
+func (s *server) run() error {
+	host, port := s.cfg.ServerHost, s.cfg.ServerPort
+	// Create a SOCKS5 server
+	conf := &socks5.Config{}
+	ss, err := socks5.New(conf)
+	if err != nil {
+		return err
+	}
+
+	s.socks5 = ss
+	addr := net.JoinHostPort(host, port)
+	socksAddr := net.JoinHostPort(s.cfg.ServerHost, s.cfg.ServerTLSPort)
+
 	cer, err := tls.LoadX509KeyPair(s.cfg.ServerCert, s.cfg.ServerKey)
 	if err != nil {
 		return err
 	}
 	config := &tls.Config{Certificates: []tls.Certificate{cer}}
-	ln, err := tls.Listen(s.cfg.Method, s.socksAddr, config)
+	tlsListener, err := tls.Listen(s.cfg.Method, socksAddr, config)
 	if err != nil {
 		return err
 	}
-	log.Println("[INF] gsocks5: TLS tunnel server runs on", s.socksAddr)
-	s.wg.Add(1)
-	go s.serve(ln)
 
-	<-s.done
-
-	log.Println("[INF] gsocks5: Stopping TLS tunnel server", s.socksAddr)
-	if err = ln.Close(); err != nil {
-		log.Println("[ERR] gsocks5: Failed to close tls listener", err)
-	}
-	return nil
-}
-
-func (s *server) run() error {
-	var err error
-	var host, port string
-	switch {
-	case s.cfg.Role == roleClient:
-		host, port = s.cfg.ClientHost, s.cfg.ClientPort
-	case s.cfg.Role == roleServer:
-		host, port = s.cfg.ServerHost, s.cfg.ServerPort
-		// Create a SOCKS5 server
-		conf := &socks5.Config{}
-		s.socks5, err = socks5.New(conf)
-		if err != nil {
-			return err
-		}
-	}
-
-	addr := net.JoinHostPort(host, port)
-	s.socksAddr = net.JoinHostPort(s.cfg.ServerHost, s.cfg.ServerTLSPort)
-
-	if s.cfg.Role == roleServer {
-		s.wg.Add(1)
-		go s.tlsServer()
-	}
-
-	l, err := net.Listen(s.cfg.Method, addr)
+	rawListener, err := net.Listen(s.cfg.Method, addr)
 	if err != nil {
 		return err
 	}
-	s.wg.Add(1)
-	go s.serve(l)
 
 	log.Println("[INF] gsocks5: Proxy server runs on", addr)
+	s.wg.Add(1)
+	go s.serve(rawListener)
+
+	log.Println("[INF] gsocks5: TLS tunnel server runs on", socksAddr)
+	s.wg.Add(1)
+	go s.serve(tlsListener)
+
 	select {
 	// Wait for SIGINT or SIGTERM
 	case <-s.signal:
@@ -217,11 +125,16 @@ func (s *server) run() error {
 	}
 
 	// Signal all running goroutines to stop.
-	log.Println("[INF] gsocks5: Stopping proxy", addr)
 	s.shutdown()
 
-	if err = l.Close(); err != nil {
+	log.Println("[INF] gsocks5: Stopping proxy", addr)
+	if err = rawListener.Close(); err != nil {
 		log.Println("[ERR] gsocks5: Failed to close listener", err)
+	}
+
+	log.Println("[INF] gsocks5: Stopping TLS tunnel server", socksAddr)
+	if err = tlsListener.Close(); err != nil {
+		log.Println("[ERR] gsocks5: Failed to close tls listener", err)
 	}
 
 	ch := make(chan struct{})
@@ -236,6 +149,5 @@ func (s *server) run() error {
 		log.Println("[WARN] Some goroutines will be stopped immediately")
 	}
 
-	err = <-s.errChan
-	return err
+	return <-s.errChan
 }
