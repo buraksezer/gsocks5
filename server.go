@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"io"
 	"log"
 	"net"
@@ -28,7 +29,7 @@ func newServer(cfg config) *server {
 		cfg:             cfg,
 		keepAlivePeriod: time.Duration(cfg.KeepAlivePeriod) * time.Second,
 		dialTimeout:     time.Duration(cfg.DialTimeout) * time.Second,
-		errChan:         make(chan error, 1),
+		errChan:         make(chan error, 2),
 		signal:          make(chan os.Signal),
 		done:            make(chan struct{}),
 	}
@@ -67,22 +68,25 @@ func (s *server) proxyClientConn(conn, rConn net.Conn, ch chan struct{}) {
 func (s *server) clientConn(conn net.Conn) {
 	defer s.wg.Done()
 	defer closeConn(conn)
+
 	rConn, err := net.DialTimeout(s.cfg.Method, s.socksAddr, s.dialTimeout)
 	if err != nil {
 		log.Println("[ERR] gsocks5: Failed to dial", s.socksAddr, err)
 		return
 	}
-	defer closeConn(rConn)
 
-	// ASSOCIATE command has not been implemented by go-socks5. We currently support TCP but when someone
-	// implements ASSOCIATE command, we will implement an UDP relay in gsocks5.
-	if s.cfg.Method == "tcp" {
-		rConn.(*net.TCPConn).SetKeepAlive(true)
-		rConn.(*net.TCPConn).SetKeepAlivePeriod(s.keepAlivePeriod)
+	defer closeConn(rConn)
+	cfg := &tls.Config{
+		InsecureSkipVerify: s.cfg.InsecureSkipVerify,
+	}
+	tlsConn := tls.Client(rConn, cfg)
+	if err = tlsConn.Handshake(); err != nil {
+		log.Println("[ERR] gsocks5: Failed to dial", s.socksAddr, err)
+		return
 	}
 	ch := make(chan struct{})
 	s.wg.Add(1)
-	go s.proxyClientConn(conn, rConn, ch)
+	go s.proxyClientConn(conn, tlsConn, ch)
 	select {
 	case <-s.done:
 	case <-ch:
@@ -125,15 +129,14 @@ func (s *server) serve(l net.Listener) {
 			return
 		}
 
-		// ASSOCIATE command has not been implemented by go-socks5. We currently support TCP but when someone
-		// implements ASSOCIATE command, we will implement an UDP relay in gsocks5.
-		if s.cfg.Method == "tcp" {
-			conn.(*net.TCPConn).SetKeepAlive(true)
-			conn.(*net.TCPConn).SetKeepAlivePeriod(s.keepAlivePeriod)
-		}
-
 		s.wg.Add(1)
 		if s.cfg.Role == roleClient {
+			// ASSOCIATE command has not been implemented by go-socks5. We currently support TCP but when someone
+			// implements ASSOCIATE command, we will implement an UDP relay in gsocks5.
+			if s.cfg.Method == "tcp" {
+				conn.(*net.TCPConn).SetKeepAlive(true)
+				conn.(*net.TCPConn).SetKeepAlivePeriod(s.keepAlivePeriod)
+			}
 			go s.clientConn(conn)
 			continue
 		}
@@ -148,6 +151,30 @@ func (s *server) shutdown() {
 	default:
 	}
 	close(s.done)
+}
+
+func (s *server) tlsServer() error {
+	defer s.wg.Done()
+	cer, err := tls.LoadX509KeyPair(s.cfg.ServerCert, s.cfg.ServerKey)
+	if err != nil {
+		return err
+	}
+	config := &tls.Config{Certificates: []tls.Certificate{cer}}
+	ln, err := tls.Listen(s.cfg.Method, s.socksAddr, config)
+	if err != nil {
+		return err
+	}
+	log.Println("[INF] gsocks5: TLS tunnel server runs on", s.socksAddr)
+	s.wg.Add(1)
+	go s.serve(ln)
+
+	<-s.done
+
+	log.Println("[INF] gsocks5: Stopping TLS tunnel server", s.socksAddr)
+	if err = ln.Close(); err != nil {
+		log.Println("[ERR] gsocks5: Failed to close tls listener", err)
+	}
+	return nil
 }
 
 func (s *server) run() error {
@@ -167,18 +194,21 @@ func (s *server) run() error {
 	}
 
 	addr := net.JoinHostPort(host, port)
-	s.socksAddr = net.JoinHostPort(s.cfg.ServerHost, s.cfg.ServerPort)
-	// Create a TCP/UDP server
-	l, lerr := net.Listen(s.cfg.Method, addr)
-	if lerr != nil {
-		return lerr
+	s.socksAddr = net.JoinHostPort(s.cfg.ServerHost, s.cfg.ServerTLSPort)
+
+	if s.cfg.Role == roleServer {
+		s.wg.Add(1)
+		go s.tlsServer()
 	}
 
+	l, err := net.Listen(s.cfg.Method, addr)
+	if err != nil {
+		return err
+	}
 	s.wg.Add(1)
 	go s.serve(l)
 
 	log.Println("[INF] gsocks5: Proxy server runs on", addr)
-
 	select {
 	// Wait for SIGINT or SIGTERM
 	case <-s.signal:

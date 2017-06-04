@@ -17,17 +17,21 @@ const (
 )
 
 type config struct {
-	Debug           bool   `json:"debug"`
-	Method          string `json:"method"`
-	ServerHost      string `json:"server_host"`
-	ServerPort      string `json:"server_port"`
-	ClientHost      string `json:"client_host"`
-	ClientPort      string `json:"client_port"`
-	Password        string `json:"password"`
-	KeepAlivePeriod int    `json:"keepalive_period"`
-	GracefulPeriod  int    `json:"graceful_period"`
-	DialTimeout     int    `json:"dial_timeout"`
-	Role            string `json:"role"`
+	Debug              bool   `json:"debug"`
+	Method             string `json:"method"`
+	ServerHost         string `json:"server_host"`
+	ServerPort         string `json:"server_port"`
+	ServerTLSPort      string `json:"server_tls_port"`
+	InsecureSkipVerify bool   `json:"insecure_skip_verify"`
+	ServerCert         string `json:"server_cert"`
+	ServerKey          string `json:"server_key"`
+	ClientHost         string `json:"client_host"`
+	ClientPort         string `json:"client_port"`
+	Password           string `json:"password"`
+	KeepAlivePeriod    int    `json:"keepalive_period"`
+	GracefulPeriod     int    `json:"graceful_period"`
+	DialTimeout        int    `json:"dial_timeout"`
+	Role               string `json:"role"`
 }
 
 func newConfig(file string) (config, error) {
@@ -54,6 +58,16 @@ func newConfig(file string) (config, error) {
 
 	if cfg.DialTimeout == 0 {
 		cfg.DialTimeout = defaultDialTimeout
+	}
+
+	if cfg.Role == roleServer {
+		if cfg.ServerCert == "" {
+			return cfg, errors.New("server_cert cannot be empty")
+		}
+
+		if cfg.ServerKey == "" {
+			return cfg, errors.New("server_key cannot be empty")
+		}
 	}
 	return cfg, nil
 }
