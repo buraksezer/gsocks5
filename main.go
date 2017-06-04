@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
+	"net"
 	"os"
 	"os/signal"
 	"runtime"
@@ -44,6 +45,15 @@ var (
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
+}
+
+func closeConn(conn net.Conn) {
+	err := conn.Close()
+	if err != nil {
+		if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
+			log.Println("[ERR] gsocks5: Error while closing socket", conn.RemoteAddr())
+		}
+	}
 }
 
 func main() {
@@ -87,19 +97,23 @@ func main() {
 	}
 	log.SetOutput(filter)
 
+	// Handle SIGINT and SIGTERM.
+	sigChan := make(chan os.Signal)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	switch {
 	case cfg.Role == roleClient:
 		log.Print("[INF] gsocks5: Running as client")
+		cl := newClient(cfg, sigChan)
+		if err = cl.run(); err != nil {
+			log.Fatalf("[ERR] gsocks5: failed to serve %s", err)
+		}
 	case cfg.Role == roleServer:
 		log.Print("[INF] gsocks5: Running as server")
+		srv := newServer(cfg, sigChan)
+		if err = srv.run(); err != nil {
+			log.Fatalf("[ERR] gsocks5: failed to serve %s", err)
+		}
 	}
 
-	srv := newServer(cfg)
-	// Handle SIGINT and SIGTERM.
-	signal.Notify(srv.signal, syscall.SIGINT, syscall.SIGTERM)
-
-	if err = srv.run(); err != nil {
-		log.Fatalf("[ERR] gsocks5: failed to serve %s", err)
-	}
 	log.Print("[INF] Goodbye!")
 }
