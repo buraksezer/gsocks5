@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"io"
 	"log"
@@ -85,12 +84,23 @@ func (c *client) getConnID() (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
-	nr := &newProxyRequest{}
-	if err = json.NewDecoder(resp.Body).Decode(nr); err != nil {
-		log.Println("[ERR] gsocks5: Failed to create a new SOCKS5 proxy, decode:", err)
+
+	cl := resp.Header.Get("Content-Length")
+	l, err := strconv.Atoi(cl)
+	if err != nil {
 		return "", err
 	}
-	return nr.ConnID, nil
+	body := make([]byte, l)
+	_, err = io.ReadFull(resp.Body, body)
+	if err != nil {
+		return "", err
+	}
+	connID, err := uuid.FromBytes(body)
+	if err != nil {
+		return "", err
+	}
+
+	return connID.String(), nil
 }
 
 func (c *client) write(connID string, b []byte) ([]byte, error) {
@@ -176,6 +186,7 @@ func (c *client) clientConn(conn net.Conn) {
 	connID, err := c.getConnID()
 	if err != nil {
 		log.Println("[ERR] gsocks5: Failed to create a new SOCKS5 proxy:", err)
+		return
 	}
 	ch := make(chan struct{})
 	if err := c.socksOverHTTP(conn, connID); err != nil {

@@ -4,7 +4,7 @@
         "insecure_skip_verify": true,
         "server_cert": "cert.pem",
         "server_key": "key.pem",
-        "server_host":"46.101.132.55",
+        "server_host":"localhost",
         "server_port": "8388",
         "server_tls_port": "8389",
         "client_host": "localhost",
