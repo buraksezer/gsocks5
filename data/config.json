@@ -12,7 +12,7 @@
         "password":"barfoo!",
         "dial_timeout": 10,
         "keepalive_period": 3600,
-        "graceful_period": 5,
+        "graceful_period": 1,
         "role": "client"
 }
 
