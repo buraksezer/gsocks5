@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 	"net/http"
 	"strconv"
@@ -10,19 +9,13 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-type newProxyRequest struct {
-	ConnID string `json:"conn_id"`
-}
-
 func (s *server) newSocksProxyHandler(w http.ResponseWriter, req *http.Request) {
+	// Send a random UUID as connection ID
 	connID := uuid.NewV4()
-	n := newProxyRequest{
-		ConnID: connID.String(),
-	}
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(n); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Write(connID.Bytes())
+
+	// Create and register a new proxyConn object to manage SOCKS5 over HTTP2
 	s.connStore.mu.Lock()
 	defer s.connStore.mu.Unlock()
 	conn := &proxyConn{
@@ -34,7 +27,9 @@ func (s *server) newSocksProxyHandler(w http.ResponseWriter, req *http.Request) 
 		incoming:   make(chan *bytes.Reader, 1),
 		httpDone:   make(chan struct{}),
 	}
-	s.connStore.m[n.ConnID] = conn
+	s.connStore.m[conn.connID] = conn
+
+	// Call go-socks5 for handling SOCKS5 protocol.
 	s.wg.Add(1)
 	go s.connSocks5(conn)
 }
