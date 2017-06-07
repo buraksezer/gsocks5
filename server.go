@@ -79,7 +79,8 @@ func (s *server) findSocksSocket(conn net.Conn) {
 	}
 	b := []byte{0}
 	conn.Write(b)
-	c.conn <- conn
+	c.Conn = conn
+	close(c.connReady)
 }
 
 func (s *server) serve(l net.Listener) {

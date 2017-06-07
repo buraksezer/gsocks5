@@ -14,44 +14,61 @@ import (
 
 type proxyConn struct {
 	net.Conn
+	connStore  *connStore
 	buf        *bytes.Reader
 	response   chan []byte
 	incoming   chan *bytes.Reader
-	conn       chan net.Conn
-	ready      chan struct{}
+	connReady  chan struct{}
+	httpDone   chan struct{}
 	remoteAddr string
+	connID     string
 }
 
-func (pc proxyConn) Close() error {
-	conn := pc.getConn()
-	return conn.Close()
+func (pc *proxyConn) getConn() net.Conn {
+	<-pc.connReady
+	return pc.Conn
 }
 
-func (pc proxyConn) getConn() net.Conn {
-	conn := <-pc.conn
-	pc.conn <- conn
-	return conn
+func (pc *proxyConn) Close() error {
+	pc.connStore.mu.Lock()
+	delete(pc.connStore.m, pc.connID)
+	pc.connStore.mu.Unlock()
+
+	select {
+	case <-pc.connReady:
+		return pc.Conn.Close()
+	default:
+	}
+	// There is nothing to do
+	return nil
 }
 
-func (pc proxyConn) RemoteAddr() net.Addr {
+func (pc *proxyConn) RemoteAddr() net.Addr {
+	select {
+	case <-pc.connReady:
+		// Raw TCP socket
+		return pc.Conn.RemoteAddr()
+	default:
+	}
+	// HTTP socket.
 	ip, port, _ := net.SplitHostPort(pc.remoteAddr)
 	p, _ := strconv.Atoi(port)
 	return &net.TCPAddr{IP: net.ParseIP(ip), Port: p}
 }
 
-func (pc proxyConn) read(b []byte) (int, error) {
+func (pc *proxyConn) read(b []byte) (int, error) {
 	conn := pc.getConn()
 	return conn.Read(b)
 }
 
-func (pc proxyConn) write(b []byte) (int, error) {
+func (pc *proxyConn) write(b []byte) (int, error) {
 	conn := pc.getConn()
 	return conn.Write(b)
 }
 
-func (pc proxyConn) Read(b []byte) (int, error) {
+func (pc *proxyConn) Read(b []byte) (int, error) {
 	select {
-	case <-pc.ready:
+	case <-pc.httpDone:
 		return pc.read(b)
 	default:
 	}
@@ -67,16 +84,17 @@ func (pc proxyConn) Read(b []byte) (int, error) {
 	return nr, err
 }
 
-func (pc proxyConn) Write(b []byte) (int, error) {
+func (pc *proxyConn) Write(b []byte) (int, error) {
 	select {
-	case <-pc.ready:
+	case <-pc.httpDone:
 		return pc.write(b)
 	default:
 	}
 
+	// TODO: Explain that shit.
 	nr := len(b)
 	if nr >= 6 && nr <= 22 && b[0] == socks5Version && b[1] == socksSuccess {
-		close(pc.ready)
+		close(pc.httpDone)
 	}
 
 	pc.response <- b
@@ -104,11 +122,13 @@ func (s *server) newSocksProxyHandler(w http.ResponseWriter, req *http.Request) 
 	s.connStore.mu.Lock()
 	defer s.connStore.mu.Unlock()
 	conn := &proxyConn{
+		connStore:  s.connStore,
+		connID:     connID.String(),
 		remoteAddr: req.RemoteAddr,
-		conn:       make(chan net.Conn, 1),
+		connReady:  make(chan struct{}),
 		response:   make(chan []byte, 1),
 		incoming:   make(chan *bytes.Reader, 1),
-		ready:      make(chan struct{}),
+		httpDone:   make(chan struct{}),
 	}
 	s.connStore.m[n.ConnID] = conn
 	s.wg.Add(1)
