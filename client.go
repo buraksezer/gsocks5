@@ -50,25 +50,83 @@ func newClient(cfg config, sigChan chan os.Signal) *client {
 	}
 }
 
+// copyBuffer is the actual implementation of Copy and CopyBuffer.
+// if buf is nil, one is allocated.
+func (c *client) copyBuffer(dst io.Writer, src io.Reader, proxyDone chan struct{}) (written int64, err error) {
+	buf := make([]byte, 32*1024)
+	type result struct {
+		nr  int
+		err error
+	}
+	readRes := make(chan result, 1)
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		for {
+			nr, er := src.Read(buf)
+			rr := result{nr: nr, err: er}
+			readRes <- rr
+			if err != nil {
+				return
+			}
+		}
+	}()
+
+	for {
+		select {
+		case <-proxyDone:
+			// TODO: Return an error
+			return 0, nil
+		case res := <-readRes:
+			if res.nr > 0 {
+				nw, ew := dst.Write(buf[0:res.nr])
+				if nw > 0 {
+					written += int64(nw)
+				}
+				if ew != nil {
+					err = ew
+					return written, err
+				}
+				if res.nr != nw {
+					err = io.ErrShortWrite
+					return written, err
+				}
+			}
+			if res.err != nil {
+				if res.err != io.EOF {
+					err = res.err
+				}
+				return written, err
+			}
+		}
+	}
+}
+
+func (c *client) connCopy(dst, src net.Conn, copyDone chan struct{}, proxyDone chan struct{}, wg *sync.WaitGroup) {
+	defer wg.Done()
+	_, err := c.copyBuffer(dst, src, proxyDone)
+	if err != nil {
+		if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "readfrom") {
+			log.Println("[ERR] gsocks5: Failed to copy connection from",
+				src.RemoteAddr(), "to", dst.RemoteAddr(), ":", err)
+		}
+	}
+	copyDone <- struct{}{}
+}
+
 func (c *client) proxyClientConn(conn, rConn net.Conn, ch chan struct{}) {
 	defer c.wg.Done()
 	defer close(ch)
 	var wg sync.WaitGroup
-	connCopy := func(dst, src net.Conn) {
-		defer wg.Done()
-		_, err := io.Copy(dst, src)
-		if err != nil {
-			if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "readfrom") {
-				log.Println("[ERR] gsocks5: Failed to copy connection from",
-					src.RemoteAddr(), "to", conn.RemoteAddr(), ":", err)
-			}
-			return
-		}
-	}
+	proxyDone := make(chan struct{})
+	copyDone := make(chan struct{}, 2)
 
 	wg.Add(2)
-	go connCopy(rConn, conn)
-	go connCopy(conn, rConn)
+	go c.connCopy(rConn, conn, copyDone, proxyDone, &wg)
+	go c.connCopy(conn, rConn, copyDone, proxyDone, &wg)
+
+	<-copyDone
+	close(proxyDone)
 	wg.Wait()
 }
 
@@ -103,7 +161,7 @@ func (c *client) getConnID() (string, error) {
 	return connID.String(), nil
 }
 
-func (c *client) write(connID string, b []byte) ([]byte, error) {
+func (c *client) httpPost(connID string, b []byte) ([]byte, error) {
 	endpoint := url.URL{
 		Scheme:   "https",
 		Host:     c.serverHost,
@@ -141,7 +199,6 @@ func (c *client) socksOverHTTP(src net.Conn, connID string) error {
 		nr  int
 		err error
 	}
-
 	res := make(chan result, 1)
 	rChan := func() chan result {
 		nr, er := src.Read(buf)
@@ -156,7 +213,7 @@ func (c *client) socksOverHTTP(src net.Conn, connID string) error {
 			return errors.New("[ERR] gsocks5: Request cancelled")
 		case res := <-rChan():
 			if res.nr > 0 {
-				data, ew := c.write(connID, buf[:res.nr])
+				data, ew := c.httpPost(connID, buf[:res.nr])
 				if ew != nil {
 					return ew
 				}
@@ -188,7 +245,7 @@ func (c *client) clientConn(conn net.Conn) {
 		log.Println("[ERR] gsocks5: Failed to create a new SOCKS5 proxy:", err)
 		return
 	}
-	ch := make(chan struct{})
+
 	if err := c.socksOverHTTP(conn, connID); err != nil {
 		log.Println("[ERR] gsocks5: Failed to proxy SOCKS5 over HTTP", err)
 		return
@@ -220,11 +277,13 @@ func (c *client) clientConn(conn net.Conn) {
 		return
 	}
 
+	ch := make(chan struct{})
 	c.wg.Add(1)
 	go c.proxyClientConn(conn, rConn, ch)
 	select {
 	case <-c.done:
 	case <-ch:
+		log.Println("[DEBUG] gsocks5: Connection closed", connID)
 	}
 }
 
@@ -233,6 +292,7 @@ func (c *client) serve(l net.Listener) {
 	for {
 		conn, err := l.Accept()
 		if err != nil {
+			log.Println("[ERR] gsocks5: Listener error:", err)
 			// Shutdown the client immediately.
 			c.shutdown()
 			if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
