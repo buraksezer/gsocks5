@@ -2,8 +2,8 @@ gsocks5
 =======
 Hassle-free and secure [SOCKS5](https://en.wikipedia.org/wiki/SOCKS) server in the [Go](https://golang.org) programming language. 
 
-gsocks5 utilizes [HTTP/2](https://en.wikipedia.org/wiki/HTTP/2) protocol to hide your SOCKS5 traffic between your client and remote SOCKS5 server. After SOCKS5 communication, gsocks5 creates
-a new [TCP](https://en.wikipedia.org/wiki/Transmission_Control_Protocol)(without [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security)) socket proxies your traffic through that socket. 
+gsocks5 utilizes [HTTP/2](https://en.wikipedia.org/wiki/HTTP/2) protocol to hide SOCKS5 traffic between your client and remote SOCKS5 server. After doing SOCKS5 communication, gsocks5 creates
+a new [TCP](https://en.wikipedia.org/wiki/Transmission_Control_Protocol)(without [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security)) socket to proxy your traffic through that socket. 
 
 gsocks5 uses [go-socks5](https://github.com/armon/go-socks5) library to handle the protocol.
 
