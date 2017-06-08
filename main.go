@@ -34,8 +34,6 @@ Report bugs to https://github.com/purak/gsocks5/issues`
 const (
 	version           = "0.1"
 	defaultConfigPath = "/etc/gsocks5.json"
-	socksSuccess      = 0
-	socks5Version     = 5
 )
 
 var (

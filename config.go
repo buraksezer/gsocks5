@@ -18,10 +18,8 @@ const (
 
 type config struct {
 	Debug              bool   `json:"debug"`
-	Method             string `json:"method"`
 	ServerHost         string `json:"server_host"`
 	ServerPort         string `json:"server_port"`
-	ServerTLSPort      string `json:"server_tls_port"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify"`
 	ServerCert         string `json:"server_cert"`
 	ServerKey          string `json:"server_key"`
