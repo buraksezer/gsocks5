@@ -34,14 +34,22 @@ func newClient(cfg config, sigChan chan os.Signal) *client {
 
 func (c *client) connCopy(dst, src net.Conn, copyDone chan struct{}) {
 	defer c.wg.Done()
+	defer func() {
+		copyDone <- struct{}{}
+	}()
 	_, err := io.Copy(dst, src)
 	if err != nil {
-		if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "readfrom") {
-			log.Println("[ERR] gsocks5: Failed to copy connection from",
-				src.RemoteAddr(), "to", dst.RemoteAddr(), ":", err)
+		opErr, ok := err.(*net.OpError)
+		switch {
+		case ok && opErr.Op == "readfrom":
+			return
+		case ok && opErr.Op == "read":
+			return
+		default:
 		}
+		log.Println("[ERR] gsocks5: Failed to copy connection from",
+			src.RemoteAddr(), "to", dst.RemoteAddr(), ":", err)
 	}
-	copyDone <- struct{}{}
 }
 
 func (c *client) proxyClientConn(conn, rConn net.Conn, ch chan struct{}) {
@@ -81,7 +89,6 @@ func (c *client) clientConn(conn net.Conn) {
 	select {
 	case <-c.done:
 	case <-ch:
-		log.Println("[DEBUG] gsocks5: Connection closed")
 	}
 }
 
@@ -90,7 +97,7 @@ func (c *client) serve(l net.Listener) {
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			log.Println("[ERR] gsocks5: Listener error:", err)
+			log.Println("[DEBUG] gsocks5: Listener error:", err)
 			// Shutdown the client immediately.
 			c.shutdown()
 			if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
