@@ -7,6 +7,3 @@
 [submodule "vendor/github.com/hashicorp/logutils"]
 	path = vendor/github.com/hashicorp/logutils
 	url = https://github.com/hashicorp/logutils
-[submodule "vendor/github.com/satori/go.uuid"]
-	path = vendor/github.com/satori/go.uuid
-	url = https://github.com/satori/go.uuid
