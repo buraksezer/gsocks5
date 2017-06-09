@@ -35,7 +35,7 @@ func (s *server) connSocks5(conn net.Conn) {
 	defer s.wg.Done()
 	ch := make(chan struct{})
 	s.wg.Add(1)
-	go func() {
+	go func(conn net.Conn) {
 		defer s.wg.Done()
 		select {
 		case <-s.done:
@@ -43,11 +43,19 @@ func (s *server) connSocks5(conn net.Conn) {
 			closeConn(conn)
 		case <-ch:
 		}
-	}()
+	}(conn)
 
 	defer close(ch)
 	if err := s.socks5.ServeConn(conn); err != nil {
-		log.Println("[ERR] gsocks5: Failed to proxy to ", conn.RemoteAddr(), err)
+		opErr, ok := err.(*net.OpError)
+		switch {
+		case ok && opErr.Op == "readfrom":
+			return
+		case ok && opErr.Op == "read":
+			return
+		default:
+		}
+		log.Println("[ERR] gsocks5: Failed to proxy", conn.RemoteAddr(), ":", err)
 	}
 }
 
