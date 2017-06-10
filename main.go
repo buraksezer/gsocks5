@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -32,6 +33,7 @@ The Go runtime version %s
 Report bugs to https://github.com/purak/gsocks5/issues`
 
 const (
+	maxPasswordLength = 20
 	version           = "0.1"
 	defaultConfigPath = "/etc/gsocks5.json"
 )
@@ -43,6 +45,8 @@ var (
 	debug       bool
 )
 
+var errPasswordTooLong = errors.New("Passport too long")
+
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
@@ -51,7 +55,7 @@ func closeConn(conn net.Conn) {
 	err := conn.Close()
 	if err != nil {
 		if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
-			log.Println("[ERR] gsocks5: Error while closing socket", conn.RemoteAddr())
+			log.Println("[DEBUG] gsocks5: Error while closing socket", conn.RemoteAddr(), err)
 		}
 	}
 }

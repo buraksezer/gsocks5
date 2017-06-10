@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"crypto/tls"
+	"errors"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -11,8 +14,12 @@ import (
 	"github.com/armon/go-socks5"
 )
 
+var authSuccess = []byte{1}
+var errAuthenticationFailed = errors.New("authentication failed")
+
 type server struct {
 	cfg             config
+	password        []byte
 	keepAlivePeriod time.Duration
 	wg              sync.WaitGroup
 	socks5          *socks5.Server
@@ -31,21 +38,64 @@ func newServer(cfg config, sigChan chan os.Signal) *server {
 	}
 }
 
+func (s *server) authenticate(conn net.Conn, errChan chan error) {
+	defer s.wg.Done()
+	buf := make([]byte, maxPasswordLength)
+	nr, err := conn.Read(buf)
+	if err == io.EOF {
+		err = nil
+	}
+	if err != nil {
+		errChan <- err
+		return
+	}
+	if !bytes.Equal(buf[:nr], s.password) {
+		errChan <- errAuthenticationFailed
+		return
+	}
+	_, err = conn.Write(authSuccess)
+	if err != nil {
+		log.Println("[ERR] gsocks5: Failed to write authSuccess message", conn.RemoteAddr(), ":", err)
+		errChan <- err
+		return
+	}
+	errChan <- nil
+	return
+}
+
+func (s *server) closeConnAtBackground(conn net.Conn, ch chan struct{}) {
+	defer s.wg.Done()
+	select {
+	case <-s.done:
+	case <-ch:
+	}
+	closeConn(conn)
+}
+
 func (s *server) connSocks5(conn net.Conn) {
 	defer s.wg.Done()
 	ch := make(chan struct{})
-	s.wg.Add(1)
-	go func(conn net.Conn) {
-		defer s.wg.Done()
-		select {
-		case <-s.done:
-			// Close the connection immediately. The process is shutting down.
-			closeConn(conn)
-		case <-ch:
-		}
-	}(conn)
-
 	defer close(ch)
+
+	s.wg.Add(1)
+	go s.closeConnAtBackground(conn, ch)
+
+	if s.password != nil {
+		errChan := make(chan error, 1)
+		s.wg.Add(1)
+		go s.authenticate(conn, errChan)
+		select {
+		case <-time.After(5 * time.Second):
+			log.Println("[ERR] gsocks5: Authentication expired", conn.RemoteAddr())
+			return
+		case err := <-errChan:
+			if err != nil {
+				log.Println("[ERR] gsocks5: Failed to auth", conn.RemoteAddr(), ":", err)
+				return
+			}
+		}
+		log.Println("[DEBUG] gsocks5: Authenticated TCP connection from", conn.RemoteAddr())
+	}
 	if err := s.socks5.ServeConn(conn); err != nil {
 		opErr, ok := err.(*net.OpError)
 		switch {
@@ -89,12 +139,18 @@ func (s *server) shutdown() {
 
 func (s *server) run() error {
 	host, port := s.cfg.ServerHost, s.cfg.ServerPort
-	// Create a SOCKS5 server
+	if s.cfg.Password != "" {
+		s.password = []byte(s.cfg.Password)
+		if len(s.password) > maxPasswordLength {
+			return errPasswordTooLong
+		}
+	}
 
+	// Create a SOCKS5 server
 	conf := &socks5.Config{}
-	if s.cfg.Password != "" && s.cfg.Username != "" {
+	if s.cfg.Socks5Password != "" && s.cfg.Socks5Username != "" {
 		creds := socks5.StaticCredentials{
-			s.cfg.Username: s.cfg.Password,
+			s.cfg.Socks5Username: s.cfg.Socks5Password,
 		}
 		cator := socks5.UserPassAuthenticator{Credentials: creds}
 		conf.AuthMethods = []socks5.Authenticator{cator}
