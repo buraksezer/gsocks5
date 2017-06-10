@@ -12,7 +12,6 @@ import (
 )
 
 type client struct {
-	serverHost      string
 	cfg             config
 	password        []byte
 	keepAlivePeriod time.Duration
@@ -100,9 +99,9 @@ func (c *client) clientConn(conn net.Conn) {
 	cfg := &tls.Config{
 		InsecureSkipVerify: c.cfg.InsecureSkipVerify,
 	}
-	rConn, err := tls.DialWithDialer(d, "tcp", c.serverHost, cfg)
+	rConn, err := tls.DialWithDialer(d, "tcp", c.cfg.ServerAddr, cfg)
 	if err != nil {
-		log.Println("[ERR] gsocks5: Failed to dial", c.serverHost, err)
+		log.Println("[ERR] gsocks5: Failed to dial", c.cfg.ServerAddr, err)
 		return
 	}
 	defer closeConn(rConn)
@@ -165,9 +164,6 @@ func (c *client) shutdown() {
 
 func (c *client) run() error {
 	var err error
-	host, port := c.cfg.ClientHost, c.cfg.ClientPort
-	addr := net.JoinHostPort(host, port)
-	c.serverHost = net.JoinHostPort(c.cfg.ServerHost, c.cfg.ServerPort)
 	if c.cfg.Password != "" {
 		c.password = []byte(c.cfg.Password)
 		if len(c.password) > maxPasswordLength {
@@ -175,12 +171,12 @@ func (c *client) run() error {
 		}
 	}
 
-	rawListener, err := net.Listen("tcp", addr)
+	rawListener, err := net.Listen("tcp", c.cfg.ClientAddr)
 	if err != nil {
 		return err
 	}
 
-	log.Println("[INF] gsocks5: Proxy client runs on", addr)
+	log.Println("[INF] gsocks5: Proxy client runs on", c.cfg.ClientAddr)
 	c.wg.Add(1)
 	go c.serve(rawListener)
 
@@ -194,7 +190,7 @@ func (c *client) run() error {
 	// Signal all running goroutines to stop.
 	c.shutdown()
 
-	log.Println("[INF] gsocks5: Stopping proxy client", addr)
+	log.Println("[INF] gsocks5: Stopping proxy client", c.cfg.ClientAddr)
 	if err = rawListener.Close(); err != nil {
 		log.Println("[ERR] gsocks5: Failed to close listener", err)
 	}

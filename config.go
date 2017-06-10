@@ -18,13 +18,11 @@ const (
 
 type config struct {
 	Debug              bool   `json:"debug"`
-	ServerHost         string `json:"server_host"`
-	ServerPort         string `json:"server_port"`
+	ServerAddr         string `json:"server_addr"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify"`
 	ServerCert         string `json:"server_cert"`
 	ServerKey          string `json:"server_key"`
-	ClientHost         string `json:"client_host"`
-	ClientPort         string `json:"client_port"`
+	ClientAddr         string `json:"client_addr"`
 	Password           string `json:"password"`
 	Socks5Username     string `json:"socks5_username"`
 	Socks5Password     string `json:"socks5_password"`

@@ -25,7 +25,17 @@ gsocks5 -c data/gsocks5.yml
 Configuration
 -------------
 
-TO-DO
+There are two different configuration file under data folder. 
+
+*client.json*
+
+Field        | Description
+------------ | -------------
+debug | Boolean. Disables or enables debug mode.
+insecure_skip_verify | Boolean. Disables TLS verification. It's useful if you use a self-signed TLS certificate.
+server_addr | String. Remote SOCKS5 server address, the syntax of laddr is "host:port", like "127.0.0.1:8080".
+client_addr | String. Local proxy server address, the syntax of laddr is "host:port", like "127.0.0.1:8080".
+password | Password to authenticate local server on remote server. It's not relevant with SOCKS5 protocol. 
 
 Contributions
 -------------
