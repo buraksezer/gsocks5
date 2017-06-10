@@ -136,7 +136,6 @@ func (s *server) shutdown() {
 }
 
 func (s *server) run() error {
-	host, port := s.cfg.ServerHost, s.cfg.ServerPort
 	if s.cfg.Password != "" {
 		s.password = []byte(s.cfg.Password)
 		if len(s.password) > maxPasswordLength {
@@ -159,18 +158,17 @@ func (s *server) run() error {
 	}
 	s.socks5 = ss
 
-	addr := net.JoinHostPort(host, port)
 	cer, err := tls.LoadX509KeyPair(s.cfg.ServerCert, s.cfg.ServerKey)
 	if err != nil {
 		return err
 	}
 	config := &tls.Config{Certificates: []tls.Certificate{cer}}
-	ln, err := tls.Listen("tcp", addr, config)
+	ln, err := tls.Listen("tcp", s.cfg.ServerAddr, config)
 	if err != nil {
 		return err
 	}
 
-	log.Println("[INF] gsocks5: TLS server runs on", addr)
+	log.Println("[INF] gsocks5: TLS server runs on", s.cfg.ServerAddr)
 	s.wg.Add(1)
 	go s.serve(ln)
 
@@ -184,7 +182,7 @@ func (s *server) run() error {
 	// Signal all running goroutines to stop.
 	s.shutdown()
 
-	log.Println("[INF] gsocks5: Stopping proxy", addr)
+	log.Println("[INF] gsocks5: Stopping proxy", s.cfg.ServerAddr)
 	if err = ln.Close(); err != nil {
 		log.Println("[ERR] gsocks5: Failed to close listener", err)
 	}

@@ -1,10 +1,8 @@
 {
         "debug": true,
         "insecure_skip_verify": true,
-        "server_host":"46.101.132.55",
-        "server_port": "8388",
-        "client_host": "localhost",
-        "client_port": "1080",
+        "server_addr":"46.101.132.55:8388",
+        "client_addr": "localhost:1080",
         "password":"barfoo!",
         "dial_timeout": 10,
         "keepalive_period": 3600,
