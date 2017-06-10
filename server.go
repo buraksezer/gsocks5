@@ -90,7 +90,15 @@ func (s *server) shutdown() {
 func (s *server) run() error {
 	host, port := s.cfg.ServerHost, s.cfg.ServerPort
 	// Create a SOCKS5 server
+
 	conf := &socks5.Config{}
+	if s.cfg.Password != "" && s.cfg.Username != "" {
+		creds := socks5.StaticCredentials{
+			s.cfg.Username: s.cfg.Password,
+		}
+		cator := socks5.UserPassAuthenticator{Credentials: creds}
+		conf.AuthMethods = []socks5.Authenticator{cator}
+	}
 	ss, err := socks5.New(conf)
 	if err != nil {
 		return err

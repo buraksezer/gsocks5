@@ -25,6 +25,7 @@ type config struct {
 	ServerKey          string `json:"server_key"`
 	ClientHost         string `json:"client_host"`
 	ClientPort         string `json:"client_port"`
+	Username           string `json:"username"`
 	Password           string `json:"password"`
 	KeepAlivePeriod    int    `json:"keepalive_period"`
 	GracefulPeriod     int    `json:"graceful_period"`
