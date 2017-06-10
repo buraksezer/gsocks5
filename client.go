@@ -163,7 +163,6 @@ func (c *client) shutdown() {
 }
 
 func (c *client) run() error {
-	var err error
 	if c.cfg.Password != "" {
 		c.password = []byte(c.cfg.Password)
 		if len(c.password) > maxPasswordLength {
@@ -171,14 +170,14 @@ func (c *client) run() error {
 		}
 	}
 
-	rawListener, err := net.Listen("tcp", c.cfg.ClientAddr)
+	ln, err := net.Listen("tcp", c.cfg.ClientAddr)
 	if err != nil {
 		return err
 	}
 
 	log.Println("[INF] gsocks5: Proxy client runs on", c.cfg.ClientAddr)
 	c.wg.Add(1)
-	go c.serve(rawListener)
+	go c.serve(ln)
 
 	select {
 	// Wait for SIGINT or SIGTERM
@@ -191,7 +190,7 @@ func (c *client) run() error {
 	c.shutdown()
 
 	log.Println("[INF] gsocks5: Stopping proxy client", c.cfg.ClientAddr)
-	if err = rawListener.Close(); err != nil {
+	if err = ln.Close(); err != nil {
 		log.Println("[ERR] gsocks5: Failed to close listener", err)
 	}
 
@@ -206,7 +205,5 @@ func (c *client) run() error {
 	case <-time.After(time.Duration(c.cfg.GracefulPeriod) * time.Second):
 		log.Println("[WARN] Some goroutines will be stopped immediately")
 	}
-
-	err = <-c.errChan
-	return err
+	return <-c.errChan
 }
