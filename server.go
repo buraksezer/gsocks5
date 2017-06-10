@@ -18,23 +18,21 @@ var authSuccess = []byte{1}
 var errAuthenticationFailed = errors.New("authentication failed")
 
 type server struct {
-	cfg             config
-	password        []byte
-	keepAlivePeriod time.Duration
-	wg              sync.WaitGroup
-	socks5          *socks5.Server
-	errChan         chan error
-	signal          chan os.Signal
-	done            chan struct{}
+	cfg      config
+	password []byte
+	wg       sync.WaitGroup
+	socks5   *socks5.Server
+	errChan  chan error
+	signal   chan os.Signal
+	done     chan struct{}
 }
 
 func newServer(cfg config, sigChan chan os.Signal) *server {
 	return &server{
-		cfg:             cfg,
-		keepAlivePeriod: time.Duration(cfg.KeepAlivePeriod) * time.Second,
-		errChan:         make(chan error, 2),
-		signal:          sigChan,
-		done:            make(chan struct{}),
+		cfg:     cfg,
+		signal:  sigChan,
+		errChan: make(chan error, 2),
+		done:    make(chan struct{}),
 	}
 }
 

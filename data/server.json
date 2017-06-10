@@ -1,0 +1,11 @@
+{
+        "debug": true,
+        "server_cert": "cert.pem",
+        "server_key": "key.pem",
+        "server_host":"0.0.0.0",
+        "server_port": "8388",
+        "password":"barfoo!",
+        "graceful_period": 1,
+        "role": "server"
+}
+
