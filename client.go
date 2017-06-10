@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/tls"
 	"io"
 	"log"
@@ -13,6 +14,7 @@ import (
 type client struct {
 	serverHost      string
 	cfg             config
+	password        []byte
 	keepAlivePeriod time.Duration
 	dialTimeout     time.Duration
 	wg              sync.WaitGroup
@@ -66,6 +68,28 @@ func (c *client) proxyClientConn(conn, rConn net.Conn, ch chan struct{}) {
 	<-copyDone
 }
 
+func (c *client) authenticate(conn net.Conn, errChan chan error) {
+	defer c.wg.Done()
+	_, err := conn.Write(c.password)
+	if err != nil {
+		errChan <- nil
+		return
+	}
+	// Wait for authSuccess
+	buf := make([]byte, len(authSuccess))
+	_, err = conn.Read(buf)
+	if err != nil {
+		errChan <- err
+		return
+	}
+	if !bytes.Equal(buf, authSuccess) {
+		errChan <- errAuthenticationFailed
+		return
+	}
+	errChan <- nil
+	return
+}
+
 func (c *client) clientConn(conn net.Conn) {
 	defer c.wg.Done()
 	defer closeConn(conn)
@@ -82,6 +106,22 @@ func (c *client) clientConn(conn net.Conn) {
 		return
 	}
 	defer closeConn(rConn)
+
+	if c.password != nil {
+		errChan := make(chan error, 1)
+		c.wg.Add(1)
+		go c.authenticate(rConn, errChan)
+		select {
+		case <-time.After(5 * time.Second):
+			log.Println("[ERR] gsocks5: Authentication timeout")
+			return
+		case err := <-errChan:
+			if err != nil {
+				log.Println("[ERR] gsocks5: Failed to authenticate:", err)
+				return
+			}
+		}
+	}
 
 	ch := make(chan struct{})
 	c.wg.Add(1)
@@ -126,9 +166,14 @@ func (c *client) shutdown() {
 func (c *client) run() error {
 	var err error
 	host, port := c.cfg.ClientHost, c.cfg.ClientPort
-
 	addr := net.JoinHostPort(host, port)
 	c.serverHost = net.JoinHostPort(c.cfg.ServerHost, c.cfg.ServerPort)
+	if c.cfg.Password != "" {
+		c.password = []byte(c.cfg.Password)
+		if len(c.password) > maxPasswordLength {
+			return errPasswordTooLong
+		}
+	}
 
 	rawListener, err := net.Listen("tcp", addr)
 	if err != nil {
