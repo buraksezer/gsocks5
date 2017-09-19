@@ -1,0 +1,10 @@
+[Unit]
+Description=SOCKS5 daemon
+After=syslog.target
+
+[Service]
+ExecStart=/usr/bin/gsocks5 -c /etc/gsocks5/server.json 
+Restart=on-abort
+
+[Install]
+WantedBy=multi-user.target
