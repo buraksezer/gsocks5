@@ -51,7 +51,7 @@ There are two different configuration file under **data** folder.
 
 Field        |  Type   | Description
 ------------ | ------- |-------------
-role | string | Role of this server. Set client on your localhost.
+role | string | Role of this server. Set 'client' on your local host.
 debug | boolean | Disables or enables debug mode.
 insecure_skip_verify | boolean | Disables TLS verification. It's useful if you use a self-signed TLS certificate.
 server_addr | string | Remote SOCKS5 server address, the syntax of laddr is "host:port", like "127.0.0.1:8080".
@@ -64,13 +64,13 @@ dial_timeout | int | Timeout value for dialing, in seconds.
 
 Field        |  Type   | Description
 ------------ | ------- |-------------
-role | string | Role of this server. Set server on the remote host.
+role | string | Role of this server. Set 'server' on the remote host.
 debug | boolean | Disables or enables debug mode.
 server_addr | string | Address to listen, the syntax of laddr is "host:port", like "127.0.0.1:8080".
 password | string | Password to authenticate local server on remote server. It's not relevant with SOCKS5 protocol. 
 socks5_username | string | Username for SOCKS5 Authentication protocol.
 socks5_password | string | Password for SOCKS5 Authentication protocol.
-server_cert | string | Path of the SSL certificate file.
+server_cert | string | Path of your SSL certificate file.
 server_key | string | Path of the private key file of your certificate.
 
 You may need to generate a self-signed SSL certificate for the server component, the following command should work for you:
