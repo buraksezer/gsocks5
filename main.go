@@ -1,3 +1,17 @@
+// Copyright 2017 Burak Sezer
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -18,24 +32,26 @@ import (
 	"github.com/hashicorp/logutils"
 )
 
-const usage = `gsocks5 -- Secure SOCKS5 proxy server
+const opErrAccept = "accept"
+
+const usage = `Secure SOCKS5 proxy server
 
 Usage:
    gsocks5 [command] -c [config-file-path]
 
 Commands:
-   -help,   -h  Prints this message.
-   -version -v  Prints version.
-   -debug   -d  Enables debug mode.
-   -config  -c  Configuration file path. It is /etc/gsocks5.json by default.
+   -help,   -h  Print this message.
+   -version -v  Print version.
+   -debug   -d  Enable debug mode.
+   -config  -c  Set configuration file. It is %s by default.
 
 The Go runtime version %s
-Report bugs to https://github.com/purak/gsocks5/issues`
+Report bugs to https://github.com/buraksezer/gsocks5/issues`
 
 const (
 	maxPasswordLength = 20
 	version           = "0.1"
-	defaultConfigPath = "/etc/gsocks5.json"
+	defaultConfigPath = "/etc/gsocks5/gsocks5.json"
 )
 
 var (
@@ -54,7 +70,7 @@ func init() {
 func closeConn(conn net.Conn) {
 	err := conn.Close()
 	if err != nil {
-		if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
+		if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != opErrAccept) {
 			log.Println("[DEBUG] gsocks5: Error while closing socket", conn.RemoteAddr(), err)
 		}
 	}
@@ -78,11 +94,11 @@ func main() {
 	}
 
 	if showHelp {
-		msg := fmt.Sprintf(usage, runtime.Version())
+		msg := fmt.Sprintf(usage, defaultConfigPath, runtime.Version())
 		fmt.Println(msg)
 		return
 	} else if showVersion {
-		fmt.Println("gsocks5", version)
+		fmt.Println("gsocks5 version", version)
 		return
 	}
 	cfg, err := newConfig(path)
@@ -102,7 +118,7 @@ func main() {
 	log.SetOutput(filter)
 
 	// Handle SIGINT and SIGTERM.
-	sigChan := make(chan os.Signal)
+	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	switch {
 	case cfg.Role == roleClient:
@@ -118,6 +134,5 @@ func main() {
 			log.Fatalf("[ERR] gsocks5: failed to serve %s", err)
 		}
 	}
-
 	log.Print("[INF] Goodbye!")
 }

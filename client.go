@@ -1,3 +1,17 @@
+// Copyright 2017 Burak Sezer
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -67,7 +81,7 @@ func (c *client) proxyClientConn(conn, rConn net.Conn, ch chan struct{}) {
 	<-copyDone
 }
 
-func (c *client) authenticate(conn net.Conn, errChan chan error) {
+func (c *client) authenticate(conn io.ReadWriter, errChan chan error) {
 	defer c.wg.Done()
 	_, err := conn.Write(c.password)
 	if err != nil {
@@ -86,7 +100,6 @@ func (c *client) authenticate(conn net.Conn, errChan chan error) {
 		return
 	}
 	errChan <- nil
-	return
 }
 
 func (c *client) clientConn(conn net.Conn) {
@@ -139,15 +152,25 @@ func (c *client) serve(l net.Listener) {
 			log.Println("[DEBUG] gsocks5: Listener error:", err)
 			// Shutdown the client immediately.
 			c.shutdown()
-			if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
+			if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != opErrAccept) {
 				c.errChan <- err
 				return
 			}
 			c.errChan <- nil
 			return
 		}
-		conn.(*net.TCPConn).SetKeepAlive(true)
-		conn.(*net.TCPConn).SetKeepAlivePeriod(c.keepAlivePeriod)
+		err = conn.(*net.TCPConn).SetKeepAlive(true)
+		if err != nil {
+			log.Println("[ERR] gsocks5: Failed to set KeepAlive on TCP connection")
+			return
+		}
+
+		err = conn.(*net.TCPConn).SetKeepAlivePeriod(c.keepAlivePeriod)
+		if err != nil {
+			log.Println("[ERR] gsocks5: Failed to set KeepAlivePeriod on TCP connection")
+			return
+		}
+
 		c.wg.Add(1)
 		go c.clientConn(conn)
 	}

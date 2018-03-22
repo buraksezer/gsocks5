@@ -1,3 +1,17 @@
+// Copyright 2017 Burak Sezer
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -18,8 +32,9 @@ const (
 
 type config struct {
 	Debug              bool   `json:"debug"`
-	ServerAddr         string `json:"server_addr"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify"`
+	Role               string `json:"role"`
+	ServerAddr         string `json:"server_addr"`
 	ServerCert         string `json:"server_cert"`
 	ServerKey          string `json:"server_key"`
 	ClientAddr         string `json:"client_addr"`
@@ -29,7 +44,6 @@ type config struct {
 	KeepAlivePeriod    int    `json:"keepalive_period"`
 	GracefulPeriod     int    `json:"graceful_period"`
 	DialTimeout        int    `json:"dial_timeout"`
-	Role               string `json:"role"`
 }
 
 func newConfig(file string) (config, error) {
