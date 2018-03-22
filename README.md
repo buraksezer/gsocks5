@@ -7,7 +7,11 @@ Hassle-free and secure [SOCKS5](https://en.wikipedia.org/wiki/SOCKS) server in t
 
 gsocks5 uses [go-socks5](https://github.com/armon/go-socks5) library to handle the protocol. UDP isn't supported by go-socks5, so gsocks5 doesn't support that protocol.
 
-gsocks5 consists of two different parts: client and server. The server component runs on your server and accepts connections from your client processes. The client process runs on your computer and accepts TCP connections from your localhost.
+gsocks5 consists of two different parts: client and server: 
+
+* The client component runs on your computer and accepts TCP connections from your local host. Your browser, curl or git are the clients of that component. It handles authentication and encryption between local host and the outside world.
+
+* The server component runs on your remote host and accepts connections from the client component.
 
 TLS is used to encrypt traffic(SOCKS5 protocol messages and other plain text TCP traffic like HTTP) between server and client components. After SOCKS5 is done with its job, your client and the outside world continue communication over that secured socket. This may seem bad to you. I think, this design choice doesn't create a performance bottleneck or security problem.
 
