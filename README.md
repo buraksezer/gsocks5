@@ -11,12 +11,16 @@ gsocks5 consists of two different parts: client and server. The server component
 
 TLS is used to encrypt traffic(SOCKS5 protocol messages and other plain text TCP traffic like HTTP) between server and client components. After SOCKS5 is done with its job, your client and the outside world continue communication over that secured socket. This may seem bad to you. I think, this design choice doesn't create a performance bottleneck or security problem.
 
+So you need to use an SSL certificate to run gsocks5. [Self-signed SSL certificates are good for personal use.](https://security.stackexchange.com/a/68339)
+
+gsocks5 has been tested on GNU/Linux and OSX. There is no known bug.
+
 Installation
 ------------
 With a correctly configured Go toolchain:
 
 ```sh
-go get -u github.com/purak/gsocks5
+go get -u github.com/buraksezer/gsocks5
 ```
 
 Edit the configuration file and and run it on your localhost:
@@ -60,6 +64,14 @@ server_addr | string | Address to listen, the syntax of laddr is "host:port", li
 password | string | Password to authenticate local server on remote server. It's not relevant with SOCKS5 protocol. 
 socks5_username | string | Username for SOCKS5 Authentication protocol.
 socks5_password | string | Password for SOCKS5 Authentication protocol.
+server_cert | string | Path of certificate part of SSL certificate.
+server_key | string | Path of key part of SSL certificate.
+
+You may need to generate a self-signed SSL certificate for the server component, the following command should work for  you:
+
+```sh
+openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365
+```
 
 Contributions
 -------------

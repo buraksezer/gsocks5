@@ -46,7 +46,7 @@ Commands:
    -config  -c  Set configuration file. It is %s by default.
 
 The Go runtime version %s
-Report bugs to https://github.com/purak/gsocks5/issues`
+Report bugs to https://github.com/buraksezer/gsocks5/issues`
 
 const (
 	maxPasswordLength = 20
