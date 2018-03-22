@@ -32,8 +32,9 @@ const (
 
 type config struct {
 	Debug              bool   `json:"debug"`
-	ServerAddr         string `json:"server_addr"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify"`
+	Role               string `json:"role"`
+	ServerAddr         string `json:"server_addr"`
 	ServerCert         string `json:"server_cert"`
 	ServerKey          string `json:"server_key"`
 	ClientAddr         string `json:"client_addr"`
@@ -43,7 +44,6 @@ type config struct {
 	KeepAlivePeriod    int    `json:"keepalive_period"`
 	GracefulPeriod     int    `json:"graceful_period"`
 	DialTimeout        int    `json:"dial_timeout"`
-	Role               string `json:"role"`
 }
 
 func newConfig(file string) (config, error) {

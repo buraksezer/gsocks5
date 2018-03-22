@@ -81,7 +81,7 @@ func (c *client) proxyClientConn(conn, rConn net.Conn, ch chan struct{}) {
 	<-copyDone
 }
 
-func (c *client) authenticate(conn net.Conn, errChan chan error) {
+func (c *client) authenticate(conn io.ReadWriter, errChan chan error) {
 	defer c.wg.Done()
 	_, err := conn.Write(c.password)
 	if err != nil {
@@ -100,7 +100,6 @@ func (c *client) authenticate(conn net.Conn, errChan chan error) {
 		return
 	}
 	errChan <- nil
-	return
 }
 
 func (c *client) clientConn(conn net.Conn) {
@@ -153,15 +152,25 @@ func (c *client) serve(l net.Listener) {
 			log.Println("[DEBUG] gsocks5: Listener error:", err)
 			// Shutdown the client immediately.
 			c.shutdown()
-			if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
+			if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != opErrAccept) {
 				c.errChan <- err
 				return
 			}
 			c.errChan <- nil
 			return
 		}
-		conn.(*net.TCPConn).SetKeepAlive(true)
-		conn.(*net.TCPConn).SetKeepAlivePeriod(c.keepAlivePeriod)
+		err = conn.(*net.TCPConn).SetKeepAlive(true)
+		if err != nil {
+			log.Println("[ERR] gsocks5: Failed to set KeepAlive on TCP connection")
+			return
+		}
+
+		err = conn.(*net.TCPConn).SetKeepAlivePeriod(c.keepAlivePeriod)
+		if err != nil {
+			log.Println("[ERR] gsocks5: Failed to set KeepAlivePeriod on TCP connection")
+			return
+		}
+
 		c.wg.Add(1)
 		go c.clientConn(conn)
 	}

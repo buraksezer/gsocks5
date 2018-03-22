@@ -72,7 +72,6 @@ func (s *server) authenticate(conn net.Conn, errChan chan error) {
 		return
 	}
 	errChan <- nil
-	return
 }
 
 func (s *server) closeConnAtBackground(conn net.Conn, ch chan struct{}) {
@@ -128,7 +127,7 @@ func (s *server) serve(l net.Listener) {
 		if err != nil {
 			// Shutdown the server immediately.
 			s.shutdown()
-			if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
+			if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != opErrAccept) {
 				s.errChan <- err
 				return
 			}

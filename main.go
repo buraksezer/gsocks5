@@ -32,6 +32,8 @@ import (
 	"github.com/hashicorp/logutils"
 )
 
+const opErrAccept = "accept"
+
 const usage = `Secure SOCKS5 proxy server
 
 Usage:
@@ -68,7 +70,7 @@ func init() {
 func closeConn(conn net.Conn) {
 	err := conn.Close()
 	if err != nil {
-		if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
+		if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != opErrAccept) {
 			log.Println("[DEBUG] gsocks5: Error while closing socket", conn.RemoteAddr(), err)
 		}
 	}
@@ -116,7 +118,7 @@ func main() {
 	log.SetOutput(filter)
 
 	// Handle SIGINT and SIGTERM.
-	sigChan := make(chan os.Signal)
+	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	switch {
 	case cfg.Role == roleClient:
@@ -132,6 +134,5 @@ func main() {
 			log.Fatalf("[ERR] gsocks5: failed to serve %s", err)
 		}
 	}
-
 	log.Print("[INF] Goodbye!")
 }
