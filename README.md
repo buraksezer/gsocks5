@@ -13,6 +13,22 @@ gsocks5 consists of two different parts: client and server:
 
 * The server component runs on your remote host and accepts connections from the client component.
 
+```
+             Your computer                                  Internet
+
+                                        |
+                                        |
++----------+           +----------+     |      +----------+         +------------+
+|          |           |          |     |      |          |         |            |
+|  SOCKS5  |  SOCKS5   | gsocks5  |    TLS     | gsocks5  |         |            |
+|  clients | +-------> | comp.    | +--------> | comp.    | +-----> | Internet   |
+|          |           |          |     |      |          |         |            |
++----------+           +----------+     |      +----------+         +------------+
+                                        |
+                                        |
+
+```
+
 TLS is used to encrypt traffic(SOCKS5 protocol messages and other plain text TCP traffic like HTTP) between server and client components. After SOCKS5 is done with its job, your client and the outside world continue communication over that secured socket. This may seem bad to you. I think, this design choice doesn't create a performance bottleneck or security problem.
 
 So you need to use an SSL certificate to run gsocks5. [Self-signed SSL certificates are good for personal use.](https://security.stackexchange.com/a/68339)
@@ -43,7 +59,7 @@ For systemd users, service files for both components have been provided. Please 
 
 Configuration
 -------------
-There are two different configuration file under data folder. 
+There are two different configuration file under **data** folder. 
 
 #### client.json
 
