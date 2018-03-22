@@ -1,7 +1,7 @@
 {
         "debug": true,
         "insecure_skip_verify": true,
-        "server_addr":"46.101.132.55:8388",
+        "server_addr":"your-remote-server:port-number",
         "client_addr": "localhost:1080",
         "password":"barfoo!",
         "dial_timeout": 10,
