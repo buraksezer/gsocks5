@@ -1,5 +1,8 @@
 gsocks5
 =======
+
+[![Go Report Card](https://goreportcard.com/badge/github.com/buraksezer/gsocks5)](https://goreportcard.com/report/github.com/buraksezer/gsocks5)
+
 Hassle-free and secure [SOCKS5](https://en.wikipedia.org/wiki/SOCKS) server in the [Go](https://golang.org) programming language. 
 
 gsocks5 uses [go-socks5](https://github.com/armon/go-socks5) library to handle the protocol. Due to go-socks5 doesn't support SOCKS5 over UDP,  gsocks5 cannot handle that protocol.
@@ -7,12 +10,6 @@ gsocks5 uses [go-socks5](https://github.com/armon/go-socks5) library to handle t
 gsocks5 consists of two different parts: client and server. The server component runs on your server and accepts connections from your client processes. The client process works on your computer and accepts TCP connections from your local processes i.e. your browser, git or curl. 
 
 TLS is used to encrypt traffic(SOCKS5 protocol messages) between server and client components. After SOCKS5 is done with its job, your client and the outside world continue communication over that secured socket. This may seem bad to you. But I think this design choice doesn't create a performance bottleneck or security hole more importantly.
-
-#### Disclaimer
-gsocks5 has been produced for personal use. 
-
-#### Status
-I use gsocks5 since Jun 2017 and it works fine for me.
 
 Installation
 ------------
@@ -33,7 +30,7 @@ On your server:
 gsocks5 -c path/to/server.json
 ```
 
-If you use systemd, service files for both components have been provided. Please take a look at **data** folder.
+For systemd users, service files for both components have been provided. Please take a look at **data** folder.
 
 Configuration
 -------------
