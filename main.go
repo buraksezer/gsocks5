@@ -18,16 +18,16 @@ import (
 	"github.com/hashicorp/logutils"
 )
 
-const usage = `gsocks5 -- Secure SOCKS5 proxy server
+const usage = `Secure SOCKS5 proxy server
 
 Usage:
    gsocks5 [command] -c [config-file-path]
 
 Commands:
-   -help,   -h  Prints this message.
-   -version -v  Prints version.
-   -debug   -d  Enables debug mode.
-   -config  -c  Configuration file path. It is /etc/gsocks5.json by default.
+   -help,   -h  Print this message.
+   -version -v  Print version.
+   -debug   -d  Enable debug mode.
+   -config  -c  Set configuration file. It is %s by default.
 
 The Go runtime version %s
 Report bugs to https://github.com/purak/gsocks5/issues`
@@ -35,7 +35,7 @@ Report bugs to https://github.com/purak/gsocks5/issues`
 const (
 	maxPasswordLength = 20
 	version           = "0.1"
-	defaultConfigPath = "/etc/gsocks5.json"
+	defaultConfigPath = "/etc/gsocks5/gsocks5.json"
 )
 
 var (
@@ -78,11 +78,11 @@ func main() {
 	}
 
 	if showHelp {
-		msg := fmt.Sprintf(usage, runtime.Version())
+		msg := fmt.Sprintf(usage, defaultConfigPath, runtime.Version())
 		fmt.Println(msg)
 		return
 	} else if showVersion {
-		fmt.Println("gsocks5", version)
+		fmt.Println("gsocks5 version", version)
 		return
 	}
 	cfg, err := newConfig(path)
